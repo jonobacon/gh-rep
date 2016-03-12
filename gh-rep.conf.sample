@@ -1,0 +1,7 @@
+# Rename this to gh-rep.conf
+#
+# Be sure to add your auth details below
+
+[auth]
+client_id =
+client_secret =

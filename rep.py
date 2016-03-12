@@ -5,11 +5,19 @@ import sys
 import sqlite3
 import os
 import argparse
+import ConfigParser
 
 class Rep():
     def __init__(self, args):
-        client_id = args.i
-        client_secret = args.s
+
+        config = ConfigParser.ConfigParser()
+        config.read("gh-rep.conf")
+
+        client_id = config.get("auth", "client_id")
+        client_secret = config.get("auth", "client_secret")
+
+        #client_id = args.i
+        #client_secret = args.s
 
         self.repo_people = None
         self.repo_events = None
@@ -164,112 +172,79 @@ class Rep():
 
         # Apply any filtering to the different event types to tune the score
         if event["type"] == "CommitCommentEvent":
-            rep = repo_score
+            rep = self.process_event_CommitCommentEvent(event, repo_score)
 
         elif event["type"] == "CreateEvent":
-            rep = repo_score
+            rep = self.process_event_CreateEvent(event, repo_score)
 
         elif event["type"] == "DeleteEvent":
-            rep = repo_score
+            rep = self.process_event_DeleteEvent(event, repo_score)
 
         elif event["type"] == "DeploymentEvent":
-            rep = repo_score
+            rep = self.process_event_DeploymentEvent(event, repo_score)
 
         elif event["type"] == "DeploymentStatusEvent":
-            rep = repo_score
+            rep = self.process_event_DeploymentStatusEvent(event, repo_score)
 
         elif event["type"] == "DownloadEvent":
-            rep = repo_score
+            rep = self.process_event_DownloadEvent(event, repo_score)
 
         elif event["type"] == "FollowEvent":
-            rep = repo_score
+            rep = self.process_event_FollowEvent(event, repo_score)
 
         elif event["type"] == "ForkEvent":
-            rep = repo_score
+            rep = self.process_event_ForkEvent(event, repo_score)
 
         elif event["type"] == "ForkApplyEvent":
-            rep = repo_score
+            rep = self.process_event_ForkApplyEvent(event, repo_score)
 
         elif event["type"] == "GistEvent":
-            rep = repo_score
+            rep = self.process_event_GistEvent(event, repo_score)
 
         elif event["type"] == "GollumEvent":
-            rep = repo_score
-
-        elif event["type"] == "CreateEvent":
-            rep = repo_score
+            rep = self.process_event_GollumEvent(event, repo_score)
 
         elif event["type"] == "IssueCommentEvent":
-            # Check: is this comment a PR comment?
-            #  Yes: full points
-            #  No: 50% deduction
-            if "pull_request" in event["payload"]["issue"]:
-                rep = repo_score
-            else:
-                rep = (repo_score / 2)
+            rep = self.process_event_IssueCommentEvent(event, repo_score)
 
         elif event["type"] == "IssuesEvent":
-            # Check: assess what kind of issue event this is and assign a % of the points
-            # for actions that could suggest responsibility and good conduct.
-            if event["payload"]["action"] == "assigned":
-                rep = (90 * repo_score) / 100
-            elif event["payload"]["action"] == "unassigned":
-                rep = (90 * repo_score) / 100
-            elif event["payload"]["action"] == "labeled":
-                rep = (70 * repo_score) / 100
-            elif event["payload"]["action"] == "unlabeled":
-                rep = (70 * repo_score) / 100
-            elif event["payload"]["action"] == "opened":
-                rep = (100 * repo_score) / 100
-            elif event["payload"]["action"] == "closed":
-                rep = (60 * repo_score) / 100
-            elif event["payload"]["action"] == "reopened":
-                rep = (60 * repo_score) / 100
+            rep = self.process_event_IssuesEvent(event, repo_score)
 
         elif event["type"] == "MemberEvent":
-            rep = repo_score
+            rep = self.process_event_MemberEvent(event, repo_score)
 
         elif event["type"] == "MembershipEvent":
-            rep = repo_score
+            rep = self.process_event_MembershipEvent(event, repo_score)
 
         elif event["type"] == "PageBuildEvent":
-            rep = repo_score
+            rep = self.process_event_PageBuildEvent(event, repo_score)
 
         elif event["type"] == "PublicEvent":
-            rep = repo_score
+            rep = self.process_event_PublicEvent(event, repo_score)
 
         elif event["type"] == "PullRequestEvent":
-            # Check: has the PR been merged?
-            #  Yes: full points
-            #  No: 50% deduction
-            if event["payload"]["pull_request"]["merged_at"] is None:
-                rep = repo_score
-            else:
-                rep = (repo_score / 2)
+            rep = self.process_event_PullRequestEvent(event, repo_score)
 
         elif event["type"] == "PullRequestReviewCommentEvent":
-            rep = repo_score
+            rep = self.process_event_PullRequestReviewCommentEvent(event, repo_score)
 
         elif event["type"] == "PushEvent":
-            rep = repo_score
+            rep = self.process_event_PushEvent(event, repo_score)
 
         elif event["type"] == "ReleaseEvent":
-            rep = repo_score
+            rep = self.process_event_ReleaseEvent(event, repo_score)
 
         elif event["type"] == "RepositoryEvent":
-            rep = repo_score
+            rep = self.process_event_RepositoryEvent(event, repo_score)
 
         elif event["type"] == "StatusEvent":
-            rep = repo_score
+            rep = self.process_event_StatusEvent(event, repo_score)
 
         elif event["type"] == "TeamAddEvent":
-            rep = repo_score
+            rep = self.process_event_TeamAddEvent(event, repo_score)
 
         elif event["type"] == "WatchEvent":
-            rep = repo_score
-
-        else:
-            rep = repo_score
+            rep = self.process_event_WatchEvent(event, repo_score)
 
         # Insert the event into the database
 
@@ -279,6 +254,122 @@ class Rep():
 
         print "...processing: '" + str(event["type"]) + "' (Score: " + str(rep) + ")"
 
+    def process_event_CommitCommentEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_CreateEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_DeleteEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_DeploymentEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_DeploymentStatusEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_DownloadEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_FollowEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_ForkEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_ForkApplyEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_GistEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_GollumEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_CreateEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_IssueCommentEvent(self, event, repo_score):
+        rep = 0
+
+        # Check: is this comment a PR comment?
+        #  Yes: full points
+        #  No: 50% deduction
+        if "pull_request" in event["payload"]["issue"]:
+            rep = repo_score
+        else:
+            rep = (repo_score / 2)
+
+        return rep
+
+    def process_event_IssuesEvent(self, event, repo_score):
+        rep = 0
+
+        # Check: assess what kind of issue event this is and assign a % of the points
+        # for actions that could suggest responsibility and good conduct.
+        if event["payload"]["action"] == "assigned":
+            rep = (90 * repo_score) / 100
+        elif event["payload"]["action"] == "unassigned":
+            rep = (90 * repo_score) / 100
+        elif event["payload"]["action"] == "labeled":
+            rep = (70 * repo_score) / 100
+        elif event["payload"]["action"] == "unlabeled":
+            rep = (70 * repo_score) / 100
+        elif event["payload"]["action"] == "opened":
+            rep = (100 * repo_score) / 100
+        elif event["payload"]["action"] == "closed":
+            rep = (60 * repo_score) / 100
+        elif event["payload"]["action"] == "reopened":
+            rep = (60 * repo_score) / 100
+
+        return rep
+
+    def process_event_MemberEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_MembershipEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_PageBuildEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_PublicEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_PullRequestEvent(self, event, repo_score):
+        rep = 0
+
+        # Check: has the PR been merged?
+        #  Yes: full points
+        #  No: 50% deduction
+        if event["payload"]["pull_request"]["merged_at"] is None:
+            rep = repo_score
+        else:
+            rep = (repo_score / 2)
+
+        return rep
+
+    def process_event_PullRequestReviewCommentEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_PushEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_ReleaseEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_RepositoryEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_StatusEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_TeamAddEvent(self, event, repo_score):
+        return repo_score
+
+    def process_event_WatchEvent(self, event, repo_score):
+        return repo_score
 
     def create_report(self):
         buffer = ""
@@ -395,18 +486,18 @@ if __name__ == '__main__':
     parser.add_argument(
         '-i',
         help='GitHub Client ID (specified as a string)',
-        required=True,
+        required=False,
     )
     parser.add_argument(
         '-s',
         help='GitHub Client Secret (specified as a string)',
-        required=True,
+        required=False,
     )
 
     parser.add_argument(
         '-r',
         help="A repo to base the repo on (specified as 'foo/bar')",
-        required=True,
+        required=False,
     )
 
 
