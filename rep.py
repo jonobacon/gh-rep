@@ -43,7 +43,8 @@ class Rep():
 
         # users
         self.db.execute("CREATE TABLE users (ID INTEGER PRIMARY KEY, \
-            USERNAME TEXT NOT NULL \
+            USERNAME TEXT NOT NULL, \
+            AVATAR_URL TEXT NOT NULL \
             )")
 
         # repoevents
@@ -80,7 +81,7 @@ class Rep():
         else:
             num_pages = 1
 
-        people = [ ]
+        people = { }
         events_data = []
 
         if num_pages == 1:
@@ -92,7 +93,7 @@ class Rep():
                 d_page_json = json.loads(d_page.text or d_page.content)
 
                 for event in d_page_json:
-                    people.append(event["actor"]["login"])
+                    people[event["actor"]["login"]] = event["actor"]["avatar_url"]
                     events_data.append(event)
 
         self.repo_people = people
@@ -103,11 +104,14 @@ class Rep():
     def populate_db(self, people):
         """Populate a new DB with data"""
 
+        print people
+
         # Add users to DB
         users = {}
         key = 1
         for user in set(people):
-            sql = "INSERT INTO users(USERNAME) VALUES('" + str(user) + "')"
+            print user
+            sql = "INSERT INTO users(USERNAME, AVATAR_URL) VALUES('" + str(user) + "', '" + str(people[user]) + "')"
             users[user] = key
             self.db.execute(sql)
             self.db.commit()
@@ -388,7 +392,7 @@ class Rep():
         html = html + "<div class='col-sm-4'><h3>Most Active Generalists</h3>"
 
         # ///// Top Generalists
-        sql = "SELECT users.USERNAME, sum(events.REP) \
+        sql = "SELECT users.USERNAME, sum(events.REP), users.AVATAR_URL \
                 FROM events \
                 	JOIN reposcores \
                 		ON events.REPOEVENT = reposcores.ID \
@@ -405,13 +409,13 @@ class Rep():
         html = html + "<table class='table'>"
 
         for row in cursor:
-            html = html + "<tr><td><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong></td><td>" + str(row[1]) + "</td></tr>"
+            html = html + "<tr><td><a href='http://www.github.com/" + str(row[0]) + "'><img src='" + str(row[2]) + "' height='25px'> @" + str(row[0]) +  "</a></td><td>" + str(row[1]) + "</td></tr>"
 
         html = html + "</table></div>"
 
         # ///// Top in PRs
         html = html + "<div class='col-sm-4'><h3>Most Active in Pull Requests</h3>"
-        sql = "SELECT users.USERNAME, sum(events.REP) \
+        sql = "SELECT users.USERNAME, sum(events.REP), users.AVATAR_URL \
                 FROM events \
                 	JOIN reposcores \
                 		ON events.REPOEVENT = reposcores.ID \
@@ -432,13 +436,13 @@ class Rep():
         html = html + "<table class='table'>"
 
         for row in cursor:
-            html = html + "<tr><td><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong></td><td>" + str(row[1]) + "</td></tr>"
+            html = html + "<tr><td><a href='http://www.github.com/" + str(row[0]) + "'><img src='" + str(row[2]) + "' height='25px'> @" + str(row[0]) +  "</a></td><td>" + str(row[1]) + "</td></tr>"
 
         html = html + "</table></div>"
 
         # ///// Top in Issues
         html = html + "<div class='col-sm-4'><h3>Most Active in Issues</h3>"
-        sql = "SELECT users.USERNAME, sum(events.REP) \
+        sql = "SELECT users.USERNAME, sum(events.REP), users.AVATAR_URL \
                 FROM events \
                 	JOIN reposcores \
                 		ON events.REPOEVENT = reposcores.ID \
@@ -457,13 +461,13 @@ class Rep():
         html = html + "<table class='table'>"
 
         for row in cursor:
-            html = html + "<tr><td><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong></td><td>" + str(row[1]) + "</td></tr>"
+            html = html + "<tr><td><a href='http://www.github.com/" + str(row[0]) + "'><img src='" + str(row[2]) + "' height='25px'> @" + str(row[0]) +  "</a></td><td>" + str(row[1]) + "</td></tr>"
 
         html = html + "</table></div>"
 
         # ///// Top in Wiki
         html = html + "<div class='col-sm-4'><h3>Most Active in Wiki</h3>"
-        sql = "SELECT users.USERNAME, sum(events.REP) \
+        sql = "SELECT users.USERNAME, sum(events.REP), users.AVATAR_URL \
                 FROM events \
                 	JOIN reposcores \
                 		ON events.REPOEVENT = reposcores.ID \
@@ -481,7 +485,7 @@ class Rep():
         html = html + "<table class='table'>"
 
         for row in cursor:
-            html = html + "<tr><td><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong></td><td>" + str(row[1]) + "</td></tr>"
+            html = html + "<tr><td><a href='http://www.github.com/" + str(row[0]) + "'><img src='" + str(row[2]) + "' height='25px'> @" + str(row[0]) +  "</a></td><td>" + str(row[1]) + "</td></tr>"
 
         html = html + "</table></div>"
 
