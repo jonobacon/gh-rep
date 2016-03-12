@@ -6,16 +6,20 @@ Currently it:
 
  * Gathers the most recent 90 days of content (limited to 300 events by the API)
  * Processes these events and applies scores (for some events further processing happens)
- * Generates a report with summary lists for the most active participants
+ * Includes a simple web app to present the data.
 
 ## Requirements
 
- * This is written in Python. It uses the `response`, `sqlite3`, and standard Python library modules.
+ * This is written in Python. It uses the `response`, `sqlite3`, `cherrypy`, and standard Python library modules.
  * You will also need a Client ID and Secret for the GitHub API.
 
 ## Running
 
-Simply run `rep.py` and pass it the following arguments:
+Rename the included `gh-rep.conf.sample` file to `gh-rep.conf` and add your client ID and client secret strings. You can then run the following to process a given repo:
+
+    python rep.py -r "MycroftAI/mimic"
+
+Alternatively, you can pass these arguments:
 
  * `-i` - Client ID
  * `-s` - Client Secret
@@ -24,3 +28,5 @@ Simply run `rep.py` and pass it the following arguments:
 For example:
 
     python rep.py -i 000000000000000000 -s 000000000000000000000000000000000 -r "MycroftAI/mimic"
+
+Now go to `http://127.0.0.1:8080/` to view the web app.
