@@ -6,6 +6,7 @@ import sqlite3
 import os
 import argparse
 import ConfigParser
+import cherrypy
 
 class Rep():
     def __init__(self, args):
@@ -30,7 +31,6 @@ class Rep():
 
         self.setup_db()
         self.scan_api()
-        self.create_report()
 
     def setup_db(self):
         """Remove a pre-existing database and create a new database and schema."""
@@ -39,7 +39,7 @@ class Rep():
             os.remove("db.sql")
 
         print "Setting up the database..."
-        self.db = sqlite3.connect("db.sql")
+        self.db = sqlite3.connect("db.sql", check_same_thread=False)
 
         # users
         self.db.execute("CREATE TABLE users (ID INTEGER PRIMARY KEY, \
@@ -371,14 +371,23 @@ class Rep():
     def process_event_WatchEvent(self, event, repo_score):
         return repo_score
 
-    def create_report(self):
-        buffer = ""
+    @cherrypy.expose
+    def index(self):
+        html = ""
+        head = open("html/header.html", "r")
 
-        html = open("report.html", "w")
-        buffer = buffer + "<h1>" + str(self.reponame) + " Report</h1>"
+        html = html + head.read()
+
+        html = html + "<div class='container'><div class='page-header'> \
+            <h1>" + self.reponame + " Overview</h1> \
+        </div></div> \
+        "
+
+        html = html + "<div class='container'><div class='row'>"
+
+        html = html + "<div class='col-sm-4'><h3>Most Active Generalists</h3>"
 
         # ///// Top Generalists
-        buffer = buffer + "<h2>Most Active Generalists</h2>"
         sql = "SELECT users.USERNAME, sum(events.REP) \
                 FROM events \
                 	JOIN reposcores \
@@ -393,15 +402,15 @@ class Rep():
 
         cursor = self.db.execute(sql)
 
-        buffer = buffer + "<ul>"
+        html = html + "<table class='table'>"
 
         for row in cursor:
-            buffer = buffer + "<li><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong> (" + str(row[1]) + ")</li>"
+            html = html + "<tr><td><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong></td><td>" + str(row[1]) + "</td></tr>"
 
-        buffer = buffer + "</ul>"
+        html = html + "</table></div>"
 
         # ///// Top in PRs
-        buffer = buffer + "<h2>Most Active in Pull Requests</h2>"
+        html = html + "<div class='col-sm-4'><h3>Most Active in Pull Requests</h3>"
         sql = "SELECT users.USERNAME, sum(events.REP) \
                 FROM events \
                 	JOIN reposcores \
@@ -420,15 +429,15 @@ class Rep():
 
         cursor = self.db.execute(sql)
 
-        buffer = buffer + "<ul>"
+        html = html + "<table class='table'>"
 
         for row in cursor:
-            buffer = buffer + "<li><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong> (" + str(row[1]) + ")</li>"
+            html = html + "<tr><td><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong></td><td>" + str(row[1]) + "</td></tr>"
 
-        buffer = buffer + "</ul>"
+        html = html + "</table></div>"
 
         # ///// Top in Issues
-        buffer = buffer + "<h2>Most Active in Issues</h2>"
+        html = html + "<div class='col-sm-4'><h3>Most Active in Issues</h3>"
         sql = "SELECT users.USERNAME, sum(events.REP) \
                 FROM events \
                 	JOIN reposcores \
@@ -445,15 +454,15 @@ class Rep():
 
         cursor = self.db.execute(sql)
 
-        buffer = buffer + "<ul>"
+        html = html + "<table class='table'>"
 
         for row in cursor:
-            buffer = buffer + "<li><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong> (" + str(row[1]) + ")</li>"
+            html = html + "<tr><td><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong></td><td>" + str(row[1]) + "</td></tr>"
 
-        buffer = buffer + "</ul>"
+        html = html + "</table></div>"
 
         # ///// Top in Wiki
-        buffer = buffer + "<h2>Most Active in Wiki</h2>"
+        html = html + "<div class='col-sm-4'><h3>Most Active in Wiki</h3>"
         sql = "SELECT users.USERNAME, sum(events.REP) \
                 FROM events \
                 	JOIN reposcores \
@@ -469,15 +478,19 @@ class Rep():
 
         cursor = self.db.execute(sql)
 
-        buffer = buffer + "<ul>"
+        html = html + "<table class='table'>"
 
         for row in cursor:
-            buffer = buffer + "<li><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong> (" + str(row[1]) + ")</li>"
+            html = html + "<tr><td><strong><a href='http://www.github.com/" + str(row[0]) + "'>@" + str(row[0]) +  "</a></strong></td><td>" + str(row[1]) + "</td></tr>"
 
-        buffer = buffer + "</ul>"
+        html = html + "</table></div>"
 
-        html.write(buffer)
-        html.close()
+        html = html + "</div></div>"
+
+        foot = open("html/footer.html", "r")
+        html = html + foot.read()
+
+        return html
 
 if __name__ == '__main__':
 
@@ -504,4 +517,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     #a = Rep(sys.argv)
-    a = Rep(args)
+    #a = Rep(args)
+    cherrypy.quickstart(Rep(args))
