@@ -7,6 +7,7 @@ import os
 import argparse
 import ConfigParser
 import cherrypy
+import time
 
 class Rep():
     def __init__(self, args):
@@ -20,7 +21,14 @@ class Rep():
         #client_id = args.i
         #client_secret = args.s
 
-        self.repo_people = None
+        # Create configuration file
+        #if not os.path.isfile("gh-rep.dat"):
+        #self.datafileraw = open("gh-rep.dat",'w')
+
+        self.datafile = ConfigParser.ConfigParser()
+        self.datafile.read("gh-rep.dat")
+        print self.datafile.sections()
+
         self.repo_events = None
         self.db = None
 
@@ -29,32 +37,38 @@ class Rep():
         self.user = 'https://api.github.com/users/jonobacon'
         self.auth = "client_id=" + client_id + "&client_secret=" + client_secret
 
-        self.setup_db()
+        if not os.path.isfile("db.sql"):
+            self.db = sqlite3.connect("db.sql", check_same_thread=False)
+            self.setup_db()
+        else:
+            self.db = sqlite3.connect("db.sql", check_same_thread=False)
+
+
+
         self.scan_api()
 
     def setup_db(self):
         """Remove a pre-existing database and create a new database and schema."""
 
-        if os.path.isfile("db.sql"):
-            os.remove("db.sql")
-
         print "Setting up the database..."
-        self.db = sqlite3.connect("db.sql", check_same_thread=False)
 
         # users
         self.db.execute("CREATE TABLE users (ID INTEGER PRIMARY KEY, \
             USERNAME TEXT NOT NULL, \
-            AVATAR_URL TEXT NOT NULL \
-            )")
+            AVATAR_URL TEXT NOT NULL, \
+            UNIQUE(USERNAME) \
+        )")
 
-        # repoevents
+
+        # reposcores
         self.db.execute("CREATE TABLE reposcores (ID INTEGER PRIMARY KEY, \
             REPO TEXT NOT NULL, \
             EVENT TEXT NOT NULL, \
-            SCORE INT NOT NULL \
+            SCORE INT NOT NULL, \
+            UNIQUE(REPO, EVENT) \
             )")
 
-        # reputation
+        # events
         self.db.execute("CREATE TABLE events (ID INTEGER PRIMARY KEY, \
             USER INT NOT NULL, \
             REPOEVENT INT NOT NULL, \
@@ -70,11 +84,32 @@ class Rep():
         """Scan the API for data and return people and events"""
         data = {}
 
-        data_repo = requests.get(self.repourl + "?" + self.auth)
-        data_repo_json = json.loads(data_repo.text or data_repo.content)
+        utc_time = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+        headers = ""
 
-        data_events = requests.get(self.repourl + "/events?" + self.auth + "&per_page=100")
-        data_events_json = json.loads(data_events.text or data_events.content)
+        print self.datafile.sections()
+
+        if not self.reponame in self.datafile.sections():
+            self.datafile.add_section(self.reponame)
+            self.datafile.set(self.reponame,'last_updated', utc_time)
+
+            with open("gh-rep.dat", 'w') as configfile:
+                self.datafile.write(configfile)
+            utc_time = "Mon, 17 Sep 1979 00:00:00 GMT"
+        else:
+            utc_time = self.datafile.get(self.reponame, "last_updated")
+
+        headers = { 'If-Modified-Since': utc_time }
+
+        # get event data
+
+        data_events = requests.get(self.repourl + "/events?" + self.auth + "&per_page=100", headers=headers)
+
+        if str(data_events.status_code) == "200":
+            data_sourced = True
+            data_events_json = json.loads(data_events.text or data_events.content)
+        else:
+            print "No new events since last check."
 
         if 'Link' in data_events.headers.keys():
             num_pages = data_events.links["last"]["url"].split("&page=")[-1]
@@ -85,33 +120,38 @@ class Rep():
         events_data = []
 
         if num_pages == 1:
-            d_page = requests.get(self.repourl + "/events?" + self.auth + "&per_page=100")
-            d_page_json = json.loads(d_page.text or d_page.content)
+            d_page = requests.get(self.repourl + "/events?" + self.auth + "&per_page=100", headers=headers)
+            if str(d_page.status_code) == "200":
+                d_page_json = json.loads(d_page.text or d_page.content)
         else:
             for i in range(1, int(num_pages)+1):
-                d_page = requests.get(self.repourl + "/events?" + self.auth + "&page=" + str(i) + "&per_page=100")
-                d_page_json = json.loads(d_page.text or d_page.content)
+                d_page = requests.get(self.repourl + "/events?" + self.auth + "&page=" + str(i) + "&per_page=100", headers=headers)
+                if str(d_page.status_code) == "200":
+                    d_page_json = json.loads(d_page.text or d_page.content)
 
-                for event in d_page_json:
-                    people[event["actor"]["login"]] = event["actor"]["avatar_url"]
-                    events_data.append(event)
+                    for event in d_page_json:
+                        people[event["actor"]["login"]] = event["actor"]["avatar_url"]
+                        events_data.append(event)
 
-        self.repo_people = people
         self.repo_events = events_data
 
-        self.populate_db(self.repo_people)
+        self.populate_db(people)
+
+        # Add repo activity to the DB
+        print "Processing events:"
+        for event in self.repo_events:
+            self.process_event(event)
+        print "done."
+
 
     def populate_db(self, people):
         """Populate a new DB with data"""
-
-        print people
 
         # Add users to DB
         users = {}
         key = 1
         for user in set(people):
-            print user
-            sql = "INSERT INTO users(USERNAME, AVATAR_URL) VALUES('" + str(user) + "', '" + str(people[user]) + "')"
+            sql = "INSERT OR IGNORE INTO users(USERNAME, AVATAR_URL) VALUES('" + str(user) + "', '" + str(people[user]) + "')"
             users[user] = key
             self.db.execute(sql)
             self.db.commit()
@@ -149,24 +189,18 @@ class Rep():
         reposcores = {}
         key = 1
         for k, v in events.items():
-            sql = "INSERT INTO reposcores(REPO, EVENT, SCORE) VALUES('" + str(self.reponame) + "', '" + k + "', " + str(v) + ")"
+            sql = "INSERT OR IGNORE INTO reposcores(REPO, EVENT, SCORE) VALUES('" + str(self.reponame) + "', '" + k + "', " + str(v) + ")"
             self.db.execute(sql)
             reposcores[k] = key
             key = key + 1
 
         self.db.commit()
 
-        # Add repo activity to the DB
-        print "Processing events:"
-        for event in self.repo_events:
-            self.process_event(event)
-        print "done."
-
     def process_event(self, event):
         """Process an individual event from the API"""
 
         rep = 0
-        cursor = self.db.execute("SELECT ID, SCORE FROM reposcores WHERE EVENT = '" + event["type"] + "'")
+        cursor = self.db.execute("SELECT ID, SCORE FROM reposcores WHERE REPO = '" + self.reponame +  "' AND EVENT = '" + event["type"] + "'")
         repo_event_id, repo_score = [record for record in cursor.fetchall()][0]
 
         usercursor = self.db.execute("SELECT ID FROM users WHERE USERNAME = '" + event["actor"]["login"] + "'")
@@ -413,6 +447,8 @@ class Rep():
 
         html = html + "</table></div>"
 
+        print self.reponame
+
         # ///// Top in PRs
         html = html + "<div class='col-sm-4'><h3>Most Active in Pull Requests</h3>"
         sql = "SELECT users.USERNAME, sum(events.REP), users.AVATAR_URL \
@@ -423,9 +459,9 @@ class Rep():
                 		ON events.USER = users.ID \
                 WHERE reposcores.REPO = '" + self.reponame + "' \
                 	AND reposcores.EVENT = 'PullRequestEvent' \
-                	OR reposcores.EVENT = 'PushEvent' \
-                    OR reposcores.EVENT = 'CommitCommentEvent' \
-                	OR reposcores.EVENT = 'PullRequestReviewCommentEvent' \
+                	OR reposcores.REPO = '" + self.reponame + "' AND reposcores.EVENT = 'PushEvent' \
+                    OR reposcores.REPO = '" + self.reponame + "' AND reposcores.EVENT = 'CommitCommentEvent' \
+                	OR reposcores.REPO = '" + self.reponame + "' AND reposcores.EVENT = 'PullRequestReviewCommentEvent' \
                 GROUP BY \
                 	users.USERNAME \
                 ORDER BY 2 DESC \
@@ -450,7 +486,7 @@ class Rep():
                 		ON events.USER = users.ID \
                 WHERE reposcores.REPO = '" + self.reponame + "' \
                 	AND reposcores.EVENT = 'IssuesEvent' \
-                	OR reposcores.EVENT = 'IssueCommentEvent' \
+                	OR reposcores.REPO = '" + self.reponame + "' AND reposcores.EVENT = 'IssueCommentEvent' \
                 GROUP BY \
                 	users.USERNAME \
                 ORDER BY 2 DESC \
@@ -495,6 +531,18 @@ class Rep():
         html = html + foot.read()
 
         return html
+
+    @cherrypy.expose
+    def new(self):
+        html = ""
+        head = open("html/header.html", "r")
+        html = html + head.read()
+
+        foot = open("html/footer.html", "r")
+        html = html + foot.read()
+
+        return html
+
 
 if __name__ == '__main__':
 
