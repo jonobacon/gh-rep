@@ -22,9 +22,6 @@ class Rep():
         #client_secret = args.s
 
         # Create configuration file
-        #if not os.path.isfile("gh-rep.dat"):
-        #self.datafileraw = open("gh-rep.dat",'w')
-
         self.datafile = ConfigParser.ConfigParser()
         self.datafile.read("gh-rep.dat")
 
@@ -42,9 +39,11 @@ class Rep():
         else:
             self.db = sqlite3.connect("db.sql", check_same_thread=False)
 
-
-
-        self.scan_api()
+        # check if the repo exists
+        if requests.get(self.repourl + "/events?" + self.auth + "&per_page=100").status_code == 404:
+            print "ERROR: " + self.reponame + " does not exist"
+        else:
+            self.scan_api()
 
     def setup_db(self):
         """Remove a pre-existing database and create a new database and schema."""
@@ -83,7 +82,8 @@ class Rep():
         """Scan the API for data and return people and events"""
         data = {}
 
-        utc_time = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+        gmt_time = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+        utc_time = gmt_time
         headers = ""
 
         if not self.reponame in self.datafile.sections():
@@ -105,6 +105,11 @@ class Rep():
 
         if str(data_events.status_code) == "200":
             data_events_json = json.loads(data_events.text or data_events.content)
+            self.datafile.set(self.reponame,'last_updated', gmt_time)
+
+            with open("gh-rep.dat", 'w') as configfile:
+                self.datafile.write(configfile)
+
         else:
             print "No new events since last check."
 
