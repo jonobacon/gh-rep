@@ -27,7 +27,6 @@ class Rep():
 
         self.datafile = ConfigParser.ConfigParser()
         self.datafile.read("gh-rep.dat")
-        print self.datafile.sections()
 
         self.repo_events = None
         self.db = None
@@ -87,14 +86,13 @@ class Rep():
         utc_time = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
         headers = ""
 
-        print self.datafile.sections()
-
         if not self.reponame in self.datafile.sections():
             self.datafile.add_section(self.reponame)
             self.datafile.set(self.reponame,'last_updated', utc_time)
 
             with open("gh-rep.dat", 'w') as configfile:
                 self.datafile.write(configfile)
+            # why this date? my birthday :-)
             utc_time = "Mon, 17 Sep 1979 00:00:00 GMT"
         else:
             utc_time = self.datafile.get(self.reponame, "last_updated")
@@ -106,7 +104,6 @@ class Rep():
         data_events = requests.get(self.repourl + "/events?" + self.auth + "&per_page=100", headers=headers)
 
         if str(data_events.status_code) == "200":
-            data_sourced = True
             data_events_json = json.loads(data_events.text or data_events.content)
         else:
             print "No new events since last check."
@@ -121,8 +118,13 @@ class Rep():
 
         if num_pages == 1:
             d_page = requests.get(self.repourl + "/events?" + self.auth + "&per_page=100", headers=headers)
+
             if str(d_page.status_code) == "200":
                 d_page_json = json.loads(d_page.text or d_page.content)
+
+                for event in d_page_json:
+                    people[event["actor"]["login"]] = event["actor"]["avatar_url"]
+                    events_data.append(event)
         else:
             for i in range(1, int(num_pages)+1):
                 d_page = requests.get(self.repourl + "/events?" + self.auth + "&page=" + str(i) + "&per_page=100", headers=headers)
@@ -446,8 +448,6 @@ class Rep():
             html = html + "<tr><td><a href='http://www.github.com/" + str(row[0]) + "'><img src='" + str(row[2]) + "' height='25px'> @" + str(row[0]) +  "</a></td><td>" + str(row[1]) + "</td></tr>"
 
         html = html + "</table></div>"
-
-        print self.reponame
 
         # ///// Top in PRs
         html = html + "<div class='col-sm-4'><h3>Most Active in Pull Requests</h3>"
