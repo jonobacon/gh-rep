@@ -8,6 +8,7 @@ import argparse
 import ConfigParser
 import cherrypy
 import time
+import simplejson
 
 class Rep():
     def __init__(self, args):
@@ -17,6 +18,8 @@ class Rep():
 
         client_id = config.get("auth", "client_id")
         client_secret = config.get("auth", "client_secret")
+
+        self.refresheventjson = None
 
         #client_id = args.i
         #client_secret = args.s
@@ -43,7 +46,13 @@ class Rep():
         if requests.get(self.repourl + "/events?" + self.auth + "&per_page=100").status_code == 404:
             print "ERROR: " + self.reponame + " does not exist"
         else:
-            self.scan_api()
+            self.scan_api(self.reponame)
+
+            # Add repo activity to the DB
+            print "Processing events:"
+            for event in self.repo_events:
+                self.process_event(event, self.reponame)
+            print "done."
 
     def setup_db(self):
         """Remove a pre-existing database and create a new database and schema."""
@@ -78,24 +87,25 @@ class Rep():
 
         print "...done."
 
-    def scan_api(self):
+    def scan_api(self, reponame):
         """Scan the API for data and return people and events"""
         data = {}
+        message = ""
 
         gmt_time = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
         utc_time = gmt_time
         headers = ""
 
-        if not self.reponame in self.datafile.sections():
-            self.datafile.add_section(self.reponame)
-            self.datafile.set(self.reponame,'last_updated', utc_time)
+        if not reponame in self.datafile.sections():
+            self.datafile.add_section(reponame)
+            self.datafile.set(reponame,'last_updated', utc_time)
 
             with open("gh-rep.dat", 'w') as configfile:
                 self.datafile.write(configfile)
             # why this date? my birthday :-)
             utc_time = "Mon, 17 Sep 1979 00:00:00 GMT"
         else:
-            utc_time = self.datafile.get(self.reponame, "last_updated")
+            utc_time = self.datafile.get(reponame, "last_updated")
 
         headers = { 'If-Modified-Since': utc_time }
 
@@ -105,13 +115,13 @@ class Rep():
 
         if str(data_events.status_code) == "200":
             data_events_json = json.loads(data_events.text or data_events.content)
-            self.datafile.set(self.reponame,'last_updated', gmt_time)
+            self.datafile.set(reponame,'last_updated', gmt_time)
 
             with open("gh-rep.dat", 'w') as configfile:
                 self.datafile.write(configfile)
 
         else:
-            print "No new events since last check."
+            message = "No new events since last check."
 
         if 'Link' in data_events.headers.keys():
             num_pages = data_events.links["last"]["url"].split("&page=")[-1]
@@ -142,16 +152,11 @@ class Rep():
 
         self.repo_events = events_data
 
-        self.populate_db(people)
+        self.populate_db(people, reponame)
 
-        # Add repo activity to the DB
-        print "Processing events:"
-        for event in self.repo_events:
-            self.process_event(event)
-        print "done."
+        return message
 
-
-    def populate_db(self, people):
+    def populate_db(self, people, reponame):
         """Populate a new DB with data"""
 
         # Add users to DB
@@ -196,18 +201,18 @@ class Rep():
         reposcores = {}
         key = 1
         for k, v in events.items():
-            sql = "INSERT OR IGNORE INTO reposcores(REPO, EVENT, SCORE) VALUES('" + str(self.reponame) + "', '" + k + "', " + str(v) + ")"
+            sql = "INSERT OR IGNORE INTO reposcores(REPO, EVENT, SCORE) VALUES('" + str(reponame) + "', '" + k + "', " + str(v) + ")"
             self.db.execute(sql)
             reposcores[k] = key
             key = key + 1
 
         self.db.commit()
 
-    def process_event(self, event):
+    def process_event(self, event, reponame):
         """Process an individual event from the API"""
 
         rep = 0
-        cursor = self.db.execute("SELECT ID, SCORE FROM reposcores WHERE REPO = '" + self.reponame +  "' AND EVENT = '" + event["type"] + "'")
+        cursor = self.db.execute("SELECT ID, SCORE FROM reposcores WHERE REPO = '" + reponame +  "' AND EVENT = '" + event["type"] + "'")
         repo_event_id, repo_score = [record for record in cursor.fetchall()][0]
 
         usercursor = self.db.execute("SELECT ID FROM users WHERE USERNAME = '" + event["actor"]["login"] + "'")
@@ -297,7 +302,9 @@ class Rep():
         self.db.execute(sql)
         self.db.commit()
 
-        print "...processing: '" + str(event["type"]) + "' (Score: " + str(rep) + ")"
+        message = "...processing: '" + str(event["type"]) + "' (Score: " + str(rep) + ")"
+        print message
+        return message
 
     def process_event_CommitCommentEvent(self, event, repo_score):
         return repo_score
@@ -548,6 +555,88 @@ class Rep():
 
         return html
 
+    @cherrypy.expose
+    def update(self):
+        dict = {}
+
+        for repo in self.datafile.sections():
+            list = []
+            #html = html + "<script>$( '.updates' ).append( '<div class='" + repo + "'><h2>Refreshing '" + repo + "'</h2></div>' );</script>"
+            print "processing: " + str(repo)
+            message = self.scan_api(repo)
+            print "boom" + str(message)
+
+            # Add repo activity to the DB
+            print "Processing events:"
+            for event in self.repo_events:
+                message = self.process_event(event, repo)
+                print "mess:" + str(message)
+                list.append(message)
+            print "done."
+
+            dict[repo] = list
+
+        #dict = {'jonobacon/foo': ['ev11', 'ev22', 'ev33'], 'glucosio/glucosio-android': ['ev1', 'ev2', 'ev3']}
+
+        self.refresheventjson = json.dumps(dict)
+
+        print self.refresheventjson
+        #return "Updated %r." % (body,)
+        return self.refresheventjson
+
+    @cherrypy.expose
+    def refresh(self):
+        print "refresh data"
+        html = ""
+        head = open("html/header.html", "r")
+        html = html + head.read()
+
+        html = html + """
+        <script type="text/javascript">
+        function Update() {
+            $.ajax({
+              type: 'POST',
+              url: "update",
+              contentType: "application/json",
+              processData: false,
+              success: function(data) {
+                $(document).ready(function() {
+                    var obj = jQuery.parseJSON(data);
+                    console.log(data);
+                    counter = 1;
+                    $.each(obj, function(key,value) {
+                    console.log(key)
+                        $('.updates').append('<div><h2>Refreshing ' + key + '</h2><ul id=' + counter + '></ul></div>');
+                        $.each(value, function(ind, item) {
+                            $("#" + counter).append("<li>" + item + "</li>");
+                            console.log(item);
+                        });
+                        counter++;
+                    });
+                });
+              },
+              dataType: "text"
+            });
+        }
+        </script>
+        <div class='container'>
+            <div class='page-header'>
+                <h1>Refresh Data</h1>
+                <form id="testform" action="#" method="post">
+                <input type='submit' value='Update' onClick='Update(); return false' />
+                </form>
+                <div class='updates'>
+                </div>
+            </div>
+        </div>
+        """
+
+        print "html sent"
+
+        foot = open("html/footer.html", "r")
+        html = html + foot.read()
+
+        return html
 
 if __name__ == '__main__':
 
