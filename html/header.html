@@ -31,7 +31,6 @@
     <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
       <ul class="nav navbar-nav">
         <li><a id= "mm-home" href="/">Home</a></li>
-        <li><a id= "mm-new" href="/new">New</a></li>
       </ul>
 
       <ul class="nav navbar-nav navbar-right">
@@ -39,6 +38,8 @@
       </ul>
 
       <ul class="nav navbar-nav navbar-right">
+              <li><a id= "mm-new" href="/new"><span class="glyphicon glyphicon-plus"></span></a></li>
+
               <li class="dropdown">
                 <a id="repo" href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Select Repo <span class="caret"></span></a>
                 <ul class="dropdown-menu">
@@ -52,6 +53,19 @@
 </nav>
 
 <script>
+$.ajax({
+    type: 'GET',
+    url: "api_get_repo_list",
+    contentType: "application/json",
+    processData: false,
+    success: function(data) {
+      var obj = jQuery.parseJSON(data);
+      $.each(obj, function(index, item) {
+        $(".dropdown-menu").append("<li><a href='#'>" + item + "</a></li>");
+      });
+    }
+});
+
   $.ajax({
       type: 'GET',
       url: "api_get_current_repo",
@@ -60,6 +74,20 @@
         $("#repo:first-child").html(data + "<span class='caret'></span>");
         $("#repo:first-child").val(data + "<span class='caret'></span>");
       }
+  });
+
+  $(".dropdown-menu").on('click', 'li a', function(){
+      console.log("foo")
+      $("#repo:first-child").html($(this).text() + "<span class='caret'></span>");
+      $("#repo:first-child").val($(this).text() + "<span class='caret'></span>");
+      $.ajax({
+          type: 'GET',
+          url: "api_set_current_repo",
+          data: "repo=" + $(this).text(),
+          success: function(data) {
+              location.reload();
+          }
+      });
   });
 </script>
 

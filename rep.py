@@ -59,34 +59,8 @@ class Rep():
                 self.process_event(event, self.currentrepo)
             print "done."
 
-    def refresh_header(self):
-        print "refresh headers"
-        html = "<script>"
-        for repo in self.datafile.sections():
-            if repo == "general":
-                pass
-            else:
-                html = html + """$(".dropdown-menu").append("<li><a href='#'>""" + repo + """</a></li>");"""
+        print self.api_get_repo_list()
 
-        html = html + """
-        $(".dropdown-menu").on('click', 'li a', function(){
-            console.log("foo")
-            $("#repo:first-child").html($(this).text() + "<span class='caret'></span>");
-            $("#repo:first-child").val($(this).text() + "<span class='caret'></span>");
-            $.ajax({
-                type: 'GET',
-                url: "api_set_current_repo",
-                data: "repo=" + $(this).text(),
-                success: function(data) {
-                    location.reload();
-                }
-            });
-        });
-        """
-
-        html = html + "</script>"
-
-        return html
 
     def setup_db(self):
         """Remove a pre-existing database and create a new database and schema."""
@@ -466,8 +440,6 @@ class Rep():
 
         html = html + head.read()
 
-        html = html + self.refresh_header()
-
         html = html + "<div class='container'><div class='page-header'> \
             <h1>" + self.currentrepo + " Overview</h1> \
         </div></div> \
@@ -607,6 +579,19 @@ class Rep():
             self.datafile.write(configfile)
 
     @cherrypy.expose
+    def api_get_repo_list(self):
+        list = []
+        for repo in self.datafile.sections():
+            if repo == "general":
+                pass
+            else:
+                list.append(repo)
+
+        self.listjson = json.dumps(list)
+
+        return self.listjson
+
+    @cherrypy.expose
     def api_get_current_repo(self):
         return self.currentrepo
 
@@ -635,7 +620,6 @@ class Rep():
 
         self.refresheventjson = json.dumps(dict)
 
-        print self.refresheventjson
         return self.refresheventjson
 
     @cherrypy.expose
