@@ -20,6 +20,7 @@ class Rep():
         client_secret = config.get("auth", "client_secret")
 
         self.refresheventjson = None
+        self.currentrepo = None
 
         #client_id = args.i
         #client_secret = args.s
@@ -27,11 +28,16 @@ class Rep():
         # Create configuration file
         self.datafile = ConfigParser.ConfigParser()
         self.datafile.read("gh-rep.dat")
+        #if "general" in self.datafile.sections():
+        #    self.currentrepo = self.datafile.get("general", "selected_repo")
+        #else:
+        #    self.api_set_current_repo(args.r)
+
+        self.api_set_current_repo(args.r)
 
         self.db = None
 
         self.repourl = "https://api.github.com/repos/" + str(args.r)
-        self.reponame = self.repourl[29:].lower()
         self.user = 'https://api.github.com/users/jonobacon'
         self.auth = "client_id=" + client_id + "&client_secret=" + client_secret
 
@@ -43,31 +49,39 @@ class Rep():
 
         # check if the repo exists
         if requests.get(self.repourl + "/events?" + self.auth + "&per_page=100").status_code == 404:
-            print "ERROR: " + self.reponame + " does not exist"
+            print "ERROR: " + self.currentrepo + " does not exist"
         else:
-            repo_events = self.scan_api(self.reponame)
+            repo_events = self.scan_api(self.currentrepo)
 
             # Add repo activity to the DB
             print "Processing events:"
             for event in repo_events:
-                self.process_event(event, self.reponame)
+                self.process_event(event, self.currentrepo)
             print "done."
 
     def refresh_header(self):
         print "refresh headers"
         html = "<script>"
         for repo in self.datafile.sections():
-            print repo
-            html = html + """$(".dropdown-menu").append("<li><a href='#'>""" + repo + """</a></li>");"""
+            if repo == "general":
+                pass
+            else:
+                html = html + """$(".dropdown-menu").append("<li><a href='#'>""" + repo + """</a></li>");"""
 
         html = html + """
         $(".dropdown-menu").on('click', 'li a', function(){
-        console.log("foo")
-      $("#repo:first-child").html($(this).text() + "<span class='caret'></span>");
-      $("#repo:first-child").val($(this).text() + "<span class='caret'></span>");
-      $("#mm-home").attr("href", "?repo=" + $(this).text());
-      $("#mm-new").attr("href", "new/?repo=" + $(this).text());
-   });
+            console.log("foo")
+            $("#repo:first-child").html($(this).text() + "<span class='caret'></span>");
+            $("#repo:first-child").val($(this).text() + "<span class='caret'></span>");
+            $.ajax({
+                type: 'GET',
+                url: "api_set_current_repo",
+                data: "repo=" + $(this).text(),
+                success: function(data) {
+                    location.reload();
+                }
+            });
+        });
         """
 
         html = html + "</script>"
@@ -109,6 +123,7 @@ class Rep():
 
     def scan_api(self, reponame):
         """Scan the API for data and return people and events"""
+        print reponame
         data = {}
         message = ""
 
@@ -444,9 +459,7 @@ class Rep():
         return repo_score
 
     @cherrypy.expose
-    def index(self, repo = None):
-        if not repo:
-            repo = self.reponame
+    def index(self):
 
         html = ""
         head = open("html/header.html", "r")
@@ -456,7 +469,7 @@ class Rep():
         html = html + self.refresh_header()
 
         html = html + "<div class='container'><div class='page-header'> \
-            <h1>" + repo + " Overview</h1> \
+            <h1>" + self.currentrepo + " Overview</h1> \
         </div></div> \
         "
 
@@ -471,7 +484,7 @@ class Rep():
                 		ON events.REPOEVENT = reposcores.ID \
                 	JOIN users \
                 		ON events.USER = users.ID \
-                WHERE reposcores.REPO = '" + repo + "' \
+                WHERE reposcores.REPO = '" + self.currentrepo + "' \
                 GROUP BY \
                 	users.USERNAME \
                 ORDER BY 2 DESC \
@@ -494,11 +507,11 @@ class Rep():
                 		ON events.REPOEVENT = reposcores.ID \
                 	JOIN users \
                 		ON events.USER = users.ID \
-                WHERE reposcores.REPO = '" + repo + "' \
+                WHERE reposcores.REPO = '" + self.currentrepo + "' \
                 	AND reposcores.EVENT = 'PullRequestEvent' \
-                	OR reposcores.REPO = '" + repo + "' AND reposcores.EVENT = 'PushEvent' \
-                    OR reposcores.REPO = '" + repo + "' AND reposcores.EVENT = 'CommitCommentEvent' \
-                	OR reposcores.REPO = '" + repo + "' AND reposcores.EVENT = 'PullRequestReviewCommentEvent' \
+                	OR reposcores.REPO = '" + self.currentrepo + "' AND reposcores.EVENT = 'PushEvent' \
+                    OR reposcores.REPO = '" + self.currentrepo + "' AND reposcores.EVENT = 'CommitCommentEvent' \
+                	OR reposcores.REPO = '" + self.currentrepo + "' AND reposcores.EVENT = 'PullRequestReviewCommentEvent' \
                 GROUP BY \
                 	users.USERNAME \
                 ORDER BY 2 DESC \
@@ -521,9 +534,9 @@ class Rep():
                 		ON events.REPOEVENT = reposcores.ID \
                 	JOIN users \
                 		ON events.USER = users.ID \
-                WHERE reposcores.REPO = '" + repo + "' \
+                WHERE reposcores.REPO = '" + self.currentrepo + "' \
                 	AND reposcores.EVENT = 'IssuesEvent' \
-                	OR reposcores.REPO = '" + repo + "' AND reposcores.EVENT = 'IssueCommentEvent' \
+                	OR reposcores.REPO = '" + self.currentrepo + "' AND reposcores.EVENT = 'IssueCommentEvent' \
                 GROUP BY \
                 	users.USERNAME \
                 ORDER BY 2 DESC \
@@ -546,7 +559,7 @@ class Rep():
                 		ON events.REPOEVENT = reposcores.ID \
                 	JOIN users \
                 		ON events.USER = users.ID \
-                WHERE reposcores.REPO = '" + repo + "' \
+                WHERE reposcores.REPO = '" + self.currentrepo + "' \
                 	AND reposcores.EVENT = 'GollumEvent' \
                 GROUP BY \
                 	users.USERNAME \
@@ -570,7 +583,7 @@ class Rep():
         return html
 
     @cherrypy.expose
-    def new(self, repo):
+    def new(self):
         html = ""
         head = open("html/header.html", "r")
         html = html + head.read()
@@ -581,22 +594,44 @@ class Rep():
         return html
 
     @cherrypy.expose
-    def update(self):
+    def api_set_current_repo(self, repo):
+        print "set current repo"
+        self.currentrepo = repo
+        if not "general" in self.datafile.sections():
+            self.datafile.add_section("general")
+            self.datafile.set("general",'selected_repo', repo)
+        else:
+            self.datafile.set("general",'selected_repo', repo)
+
+        with open("gh-rep.dat", 'w') as configfile:
+            self.datafile.write(configfile)
+
+    @cherrypy.expose
+    def api_get_current_repo(self):
+        return self.currentrepo
+
+    @cherrypy.expose
+    def api_refresh_all_repos(self):
         dict = {}
 
+        print "refresh all repos"
         for repo in self.datafile.sections():
-            list = []
-            print "processing: " + str(repo)
-            repo_events = self.scan_api(repo)
+            if repo == str("general"):
+                pass
+            else:
+                print repo
+                list = []
+                print "processing: " + str(repo)
+                repo_events = self.scan_api(repo)
 
-            # Add repo activity to the DB
-            print "Processing events:"
-            for event in repo_events:
-                message = self.process_event(event, repo)
-                list.append(message)
-            print "done."
+                # Add repo activity to the DB
+                print "Processing events:"
+                for event in repo_events:
+                    message = self.process_event(event, repo)
+                    list.append(message)
+                print "done."
 
-            dict[repo] = list
+                dict[repo] = list
 
         self.refresheventjson = json.dumps(dict)
 
@@ -615,7 +650,7 @@ class Rep():
         function Update() {
             $.ajax({
               type: 'POST',
-              url: "update",
+              url: "api_refresh_all_repos",
               contentType: "application/json",
               processData: false,
               success: function(data) {

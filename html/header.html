@@ -51,4 +51,16 @@
   </div><!-- /.container-fluid -->
 </nav>
 
+<script>
+  $.ajax({
+      type: 'GET',
+      url: "api_get_current_repo",
+      processData: false,
+      success: function(data) {
+        $("#repo:first-child").html(data + "<span class='caret'></span>");
+        $("#repo:first-child").val(data + "<span class='caret'></span>");
+      }
+  });
+</script>
+
 <!-- header end -->
