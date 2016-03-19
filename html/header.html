@@ -30,13 +30,21 @@
     <!-- Collect the nav links, forms, and other content for toggling -->
     <div class="collapse navbar-collapse" id="bs-example-navbar-collapse-1">
       <ul class="nav navbar-nav">
-        <li><a href="/">Home</a></li>
-        <li><a href="/new">New</a></li>
+        <li><a id= "mm-home" href="/">Home</a></li>
+        <li><a id= "mm-new" href="/new">New</a></li>
       </ul>
 
       <ul class="nav navbar-nav navbar-right">
-        <li><a href="/refresh"><span class="glyphicon glyphicon-repeat"></span> Refresh Data</a></li>
+        <li><a href="/refresh"><span class="glyphicon glyphicon-repeat"></span></a></li>
       </ul>
+
+      <ul class="nav navbar-nav navbar-right">
+              <li class="dropdown">
+                <a id="repo" href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">Select Repo <span class="caret"></span></a>
+                <ul class="dropdown-menu">
+                </ul>
+              </li>
+            </ul>
 
           </a>
       </div><!-- /.navbar-collapse -->

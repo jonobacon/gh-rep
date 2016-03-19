@@ -28,7 +28,6 @@ class Rep():
         self.datafile = ConfigParser.ConfigParser()
         self.datafile.read("gh-rep.dat")
 
-        self.repo_events = None
         self.db = None
 
         self.repourl = "https://api.github.com/repos/" + str(args.r)
@@ -46,13 +45,34 @@ class Rep():
         if requests.get(self.repourl + "/events?" + self.auth + "&per_page=100").status_code == 404:
             print "ERROR: " + self.reponame + " does not exist"
         else:
-            self.scan_api(self.reponame)
+            repo_events = self.scan_api(self.reponame)
 
             # Add repo activity to the DB
             print "Processing events:"
-            for event in self.repo_events:
+            for event in repo_events:
                 self.process_event(event, self.reponame)
             print "done."
+
+    def refresh_header(self):
+        print "refresh headers"
+        html = "<script>"
+        for repo in self.datafile.sections():
+            print repo
+            html = html + """$(".dropdown-menu").append("<li><a href='#'>""" + repo + """</a></li>");"""
+
+        html = html + """
+        $(".dropdown-menu").on('click', 'li a', function(){
+        console.log("foo")
+      $("#repo:first-child").html($(this).text() + "<span class='caret'></span>");
+      $("#repo:first-child").val($(this).text() + "<span class='caret'></span>");
+      $("#mm-home").attr("href", "?repo=" + $(this).text());
+      $("#mm-new").attr("href", "new/?repo=" + $(this).text());
+   });
+        """
+
+        html = html + "</script>"
+
+        return html
 
     def setup_db(self):
         """Remove a pre-existing database and create a new database and schema."""
@@ -150,11 +170,11 @@ class Rep():
                         people[event["actor"]["login"]] = event["actor"]["avatar_url"]
                         events_data.append(event)
 
-        self.repo_events = events_data
+        repo_events = events_data
 
         self.populate_db(people, reponame)
 
-        return message
+        return repo_events
 
     def populate_db(self, people, reponame):
         """Populate a new DB with data"""
@@ -424,14 +444,19 @@ class Rep():
         return repo_score
 
     @cherrypy.expose
-    def index(self):
+    def index(self, repo = None):
+        if not repo:
+            repo = self.reponame
+
         html = ""
         head = open("html/header.html", "r")
 
         html = html + head.read()
 
+        html = html + self.refresh_header()
+
         html = html + "<div class='container'><div class='page-header'> \
-            <h1>" + self.reponame + " Overview</h1> \
+            <h1>" + repo + " Overview</h1> \
         </div></div> \
         "
 
@@ -446,7 +471,7 @@ class Rep():
                 		ON events.REPOEVENT = reposcores.ID \
                 	JOIN users \
                 		ON events.USER = users.ID \
-                WHERE reposcores.REPO = '" + self.reponame + "' \
+                WHERE reposcores.REPO = '" + repo + "' \
                 GROUP BY \
                 	users.USERNAME \
                 ORDER BY 2 DESC \
@@ -469,11 +494,11 @@ class Rep():
                 		ON events.REPOEVENT = reposcores.ID \
                 	JOIN users \
                 		ON events.USER = users.ID \
-                WHERE reposcores.REPO = '" + self.reponame + "' \
+                WHERE reposcores.REPO = '" + repo + "' \
                 	AND reposcores.EVENT = 'PullRequestEvent' \
-                	OR reposcores.REPO = '" + self.reponame + "' AND reposcores.EVENT = 'PushEvent' \
-                    OR reposcores.REPO = '" + self.reponame + "' AND reposcores.EVENT = 'CommitCommentEvent' \
-                	OR reposcores.REPO = '" + self.reponame + "' AND reposcores.EVENT = 'PullRequestReviewCommentEvent' \
+                	OR reposcores.REPO = '" + repo + "' AND reposcores.EVENT = 'PushEvent' \
+                    OR reposcores.REPO = '" + repo + "' AND reposcores.EVENT = 'CommitCommentEvent' \
+                	OR reposcores.REPO = '" + repo + "' AND reposcores.EVENT = 'PullRequestReviewCommentEvent' \
                 GROUP BY \
                 	users.USERNAME \
                 ORDER BY 2 DESC \
@@ -496,9 +521,9 @@ class Rep():
                 		ON events.REPOEVENT = reposcores.ID \
                 	JOIN users \
                 		ON events.USER = users.ID \
-                WHERE reposcores.REPO = '" + self.reponame + "' \
+                WHERE reposcores.REPO = '" + repo + "' \
                 	AND reposcores.EVENT = 'IssuesEvent' \
-                	OR reposcores.REPO = '" + self.reponame + "' AND reposcores.EVENT = 'IssueCommentEvent' \
+                	OR reposcores.REPO = '" + repo + "' AND reposcores.EVENT = 'IssueCommentEvent' \
                 GROUP BY \
                 	users.USERNAME \
                 ORDER BY 2 DESC \
@@ -521,7 +546,7 @@ class Rep():
                 		ON events.REPOEVENT = reposcores.ID \
                 	JOIN users \
                 		ON events.USER = users.ID \
-                WHERE reposcores.REPO = '" + self.reponame + "' \
+                WHERE reposcores.REPO = '" + repo + "' \
                 	AND reposcores.EVENT = 'GollumEvent' \
                 GROUP BY \
                 	users.USERNAME \
@@ -545,7 +570,7 @@ class Rep():
         return html
 
     @cherrypy.expose
-    def new(self):
+    def new(self, repo):
         html = ""
         head = open("html/header.html", "r")
         html = html + head.read()
@@ -561,27 +586,21 @@ class Rep():
 
         for repo in self.datafile.sections():
             list = []
-            #html = html + "<script>$( '.updates' ).append( '<div class='" + repo + "'><h2>Refreshing '" + repo + "'</h2></div>' );</script>"
             print "processing: " + str(repo)
-            message = self.scan_api(repo)
-            print "boom" + str(message)
+            repo_events = self.scan_api(repo)
 
             # Add repo activity to the DB
             print "Processing events:"
-            for event in self.repo_events:
+            for event in repo_events:
                 message = self.process_event(event, repo)
-                print "mess:" + str(message)
                 list.append(message)
             print "done."
 
             dict[repo] = list
 
-        #dict = {'jonobacon/foo': ['ev11', 'ev22', 'ev33'], 'glucosio/glucosio-android': ['ev1', 'ev2', 'ev3']}
-
         self.refresheventjson = json.dumps(dict)
 
         print self.refresheventjson
-        #return "Updated %r." % (body,)
         return self.refresheventjson
 
     @cherrypy.expose
