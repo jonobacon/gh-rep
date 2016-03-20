@@ -28,16 +28,11 @@ class Rep():
         # Create configuration file
         self.datafile = ConfigParser.ConfigParser()
         self.datafile.read("gh-rep.dat")
-        #if "general" in self.datafile.sections():
-        #    self.currentrepo = self.datafile.get("general", "selected_repo")
-        #else:
-        #    self.api_set_current_repo(args.r)
 
-        self.api_set_current_repo(args.r)
+        self.currentrepo = self.api_set_current_repo(args.r)
 
         self.db = None
 
-        self.repourl = "https://api.github.com/repos/" + str(args.r)
         self.user = 'https://api.github.com/users/jonobacon'
         self.auth = "client_id=" + client_id + "&client_secret=" + client_secret
 
@@ -47,20 +42,7 @@ class Rep():
         else:
             self.db = sqlite3.connect("db.sql", check_same_thread=False)
 
-        # check if the repo exists
-        if requests.get(self.repourl + "/events?" + self.auth + "&per_page=100").status_code == 404:
-            print "ERROR: " + self.currentrepo + " does not exist"
-        else:
-            repo_events = self.scan_api(self.currentrepo)
-
-            # Add repo activity to the DB
-            print "Processing events:"
-            for event in repo_events:
-                self.process_event(event, self.currentrepo)
-            print "done."
-
-        print self.api_get_repo_list()
-
+        self.api_add_repo(args.r)
 
     def setup_db(self):
         """Remove a pre-existing database and create a new database and schema."""
@@ -97,7 +79,9 @@ class Rep():
 
     def scan_api(self, reponame):
         """Scan the API for data and return people and events"""
-        print reponame
+        repourl = "https://api.github.com/repos/" + str(reponame)
+
+        print "scanning: " + reponame
         data = {}
         message = ""
 
@@ -120,7 +104,7 @@ class Rep():
 
         # get event data
 
-        data_events = requests.get(self.repourl + "/events?" + self.auth + "&per_page=100", headers=headers)
+        data_events = requests.get(repourl + "/events?" + self.auth + "&per_page=100", headers=headers)
 
         if str(data_events.status_code) == "200":
             data_events_json = json.loads(data_events.text or data_events.content)
@@ -141,7 +125,7 @@ class Rep():
         events_data = []
 
         if num_pages == 1:
-            d_page = requests.get(self.repourl + "/events?" + self.auth + "&per_page=100", headers=headers)
+            d_page = requests.get(repourl + "/events?" + self.auth + "&per_page=100", headers=headers)
 
             if str(d_page.status_code) == "200":
                 d_page_json = json.loads(d_page.text or d_page.content)
@@ -151,7 +135,7 @@ class Rep():
                     events_data.append(event)
         else:
             for i in range(1, int(num_pages)+1):
-                d_page = requests.get(self.repourl + "/events?" + self.auth + "&page=" + str(i) + "&per_page=100", headers=headers)
+                d_page = requests.get(repourl + "/events?" + self.auth + "&page=" + str(i) + "&per_page=100", headers=headers)
                 if str(d_page.status_code) == "200":
                     d_page_json = json.loads(d_page.text or d_page.content)
 
@@ -167,6 +151,7 @@ class Rep():
 
     def populate_db(self, people, reponame):
         """Populate a new DB with data"""
+        print "populating db with: " + reponame
 
         # Add users to DB
         users = {}
@@ -311,7 +296,7 @@ class Rep():
         self.db.execute(sql)
         self.db.commit()
 
-        message = "...processing: '" + str(event["type"]) + "' (Score: " + str(rep) + ")"
+        message = "...processing: '" + str(reponame) + str(event["type"]) + "' (Score: " + str(rep) + ")"
         print message
         return message
 
@@ -560,6 +545,35 @@ class Rep():
         head = open("html/header.html", "r")
         html = html + head.read()
 
+        html = html + """
+
+        <script type="text/javascript">
+        function AddRepo() {
+            $.ajax({
+              type: 'POST',
+              url: "api_add_repo",
+              data: "repo=" + $("#form_repo").val(),
+              processData: false,
+              success: function(data) {
+                window.location.replace("http://127.0.0.1:8080");
+              },
+              dataType: "text"
+            });
+        }
+        </script>
+
+        <div class="container">
+            <h1>Add a Repo</h1>
+            <form>
+              <fieldset class="form-group">
+                <label>Repo name</label>
+                <input class="form-control" id="form_repo" placeholder="In format 'foo/bar'">
+              </fieldset>
+              <button type="submit" class="btn btn-primary" onClick='AddRepo(); return false'>Add Repo</button>
+            </form>
+        </div>
+        """
+
         foot = open("html/footer.html", "r")
         html = html + foot.read()
 
@@ -567,16 +581,19 @@ class Rep():
 
     @cherrypy.expose
     def api_set_current_repo(self, repo):
-        print "set current repo"
         self.currentrepo = repo
+        print "set current repo: " + self.currentrepo
+
         if not "general" in self.datafile.sections():
             self.datafile.add_section("general")
             self.datafile.set("general",'selected_repo', repo)
         else:
             self.datafile.set("general",'selected_repo', repo)
 
-        with open("gh-rep.dat", 'w') as configfile:
-            self.datafile.write(configfile)
+            with open("gh-rep.dat", 'w') as configfile:
+                self.datafile.write(configfile)
+
+            return repo
 
     @cherrypy.expose
     def api_get_repo_list(self):
@@ -590,6 +607,26 @@ class Rep():
         self.listjson = json.dumps(list)
 
         return self.listjson
+
+    @cherrypy.expose
+    def api_add_repo(self, repo):
+
+        repourl = "https://api.github.com/repos/" + str(repo)
+
+        # check if the repo exists
+        if requests.get(repourl + "/events?" + self.auth + "&per_page=100").status_code == 404:
+            print "ERROR: " + repo + " does not exist"
+        else:
+            cursor = self.db.execute("SELECT REPO FROM REPOSCORES WHERE REPO = '" + str(repo) + "';")
+            if cursor.fetchone() == None:
+                self.api_set_current_repo(repo)
+                repo_events = self.scan_api(self.currentrepo)
+
+                # Add repo activity to the DB
+                print "Processing events:"
+                for event in repo_events:
+                    self.process_event(event, self.currentrepo)
+                print "done."
 
     @cherrypy.expose
     def api_get_current_repo(self):
